@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#141C26">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Точно</title>
+<style>
+:root{
+  --ink:#141C26;
+  --paper:#EEF2F6;
+  --muted:#93A3B4;
+  --line:rgba(238,242,246,.13);
+  --ac:#8FBBA4;
+  --sage:var(--ac);
+  --sand:var(--ac);
+  --surface:rgba(20,28,38,.62);
+  --scrim:.55;
+  --r:14px;
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-t:env(safe-area-inset-top,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  color:var(--paper);
+  background:var(--ink);
+  overscroll-behavior-y:none;
+  -webkit-font-smoothing:antialiased;
+}
+#bg{position:fixed;inset:0;z-index:-2;background:linear-gradient(170deg,#1B2836,#141C26 60%,#101720);background-size:cover;background-position:center}
+#scrim{position:fixed;inset:0;z-index:-1;background:#0D131B;opacity:var(--scrim);transition:opacity .2s}
+#view{padding:calc(var(--safe-t) + 22px) 20px calc(94px + var(--safe-b));max-width:620px;margin:0 auto;min-height:100%}
+
+/* ---------- шапка дня ---------- */
+.daylabel{font-size:13px;color:var(--muted);letter-spacing:.02em}
+.date{font-size:32px;font-weight:300;line-height:1.15;margin:2px 0 0;letter-spacing:-.01em}
+.date b{font-weight:500}
+.scenline{display:flex;align-items:baseline;gap:10px;margin-top:14px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.scenname{font-size:16px;font-weight:500}
+.count{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;margin-left:auto}
+.count.done{color:var(--sage)}
+
+/* ---------- пункты ---------- */
+.list{list-style:none;margin:0;padding:0}
+.item{border-bottom:1px solid var(--line);position:relative}
+.row{display:flex;align-items:flex-start;gap:14px;padding:17px 2px;transition:filter .22s,opacity .22s}
+.item.pending .row{filter:blur(4px);opacity:.5;pointer-events:none}
+.box{flex:none;width:22px;height:22px;border:1.5px solid var(--muted);border-radius:7px;margin-top:1px;display:grid;place-items:center;transition:.18s}
+.item.locked .box{border-color:var(--sage);background:var(--sage)}
+.box svg{width:13px;height:13px;opacity:0;transform:scale(.7);transition:.18s}
+.item.locked .box svg{opacity:1;transform:none}
+.txt{font-size:16.5px;line-height:1.35;padding-top:1px;word-break:break-word}
+.item.locked .txt{color:var(--muted)}
+.stamp{flex:none;margin-left:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;color:var(--sage);padding-top:4px;letter-spacing:.03em}
+.thumb{flex:none;width:34px;height:34px;border-radius:8px;object-fit:cover;margin-left:8px;border:1px solid var(--line)}
+
+/* оверлей подтверждения */
+.confirm{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:10px;animation:pop .18s ease-out}
+@keyframes pop{from{opacity:0;transform:scale(.97)}}
+.cbtn{border:0;font:inherit;font-size:14.5px;font-weight:500;padding:10px 18px;border-radius:11px;color:var(--ink);background:var(--sage)}
+.cbtn.ghost{background:rgba(238,242,246,.12);color:var(--paper)}
+.cbtn.cam{background:rgba(238,242,246,.12);color:var(--paper);padding:10px 12px;display:grid;place-items:center}
+.cbtn.cam.has{background:transparent;border:1.5px solid var(--ac);color:var(--ac)}
+.cbtn svg{width:17px;height:17px;display:block}
+
+/* ---------- общие ---------- */
+.h{font-size:22px;font-weight:400;margin:0 0 4px}
+.sub{font-size:14px;color:var(--muted);line-height:1.5;margin:0 0 22px}
+.card{background:var(--surface);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:var(--r)}
+.big{display:block;width:100%;text-align:left;font:inherit;font-size:16px;color:var(--paper);background:var(--surface);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;margin-bottom:10px}
+.big span{display:block;font-size:13px;color:var(--muted);margin-top:3px}
+.big:active{background:rgba(238,242,246,.08)}
+.link{background:none;border:0;font:inherit;font-size:15px;color:var(--sand);padding:12px 0}
+.link.danger{color:#D98B7E}
+input[type=text]{width:100%;font:inherit;font-size:16px;color:var(--paper);background:rgba(238,242,246,.07);border:1px solid var(--line);border-radius:11px;padding:13px 14px}
+input[type=text]:focus{outline:none;border-color:var(--sand)}
+.empty{text-align:center;color:var(--muted);font-size:14.5px;line-height:1.6;padding:50px 20px}
+
+/* сценарии */
+.srow{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid var(--line)}
+.srow:last-child{border-bottom:0}
+.srow .nm{font-size:16px}
+.srow .ct{font-size:13px;color:var(--muted);margin-left:auto}
+.editrow{display:flex;align-items:center;gap:12px;padding:14px 2px;border-bottom:1px solid var(--line)}
+.editrow .t{font-size:16px;flex:1;line-height:1.35}
+.x{border:0;background:none;color:var(--muted);padding:6px;display:grid;place-items:center}
+.x svg{width:16px;height:16px}
+.addbar{display:flex;gap:8px;margin-top:16px}
+.addbar button{flex:none;border:0;font:inherit;font-size:15px;font-weight:500;background:var(--sand);color:var(--ink);border-radius:11px;padding:0 18px}
+
+/* календарь */
+.calhead{display:flex;align-items:center;justify-content:space-between;padding:4px 6px 14px}
+.calhead .m{font-size:16.5px;font-weight:500}
+.arw{border:0;background:none;color:var(--paper);padding:8px 14px;display:grid;place-items:center}
+.arw svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.arw:disabled{color:#4C5561}
+.wk,.days{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.wk span{text-align:center;font-size:11px;color:var(--muted);padding-bottom:6px}
+.cell{aspect-ratio:1;display:grid;place-items:center;border-radius:11px;font-size:14.5px;color:#5D6874;position:relative;font-variant-numeric:tabular-nums}
+.cell.has{color:var(--paper)}
+.cell.now{box-shadow:inset 0 0 0 1px var(--line)}
+.cell.sel{background:rgba(238,242,246,.13)}
+.cell i{position:absolute;bottom:5px;width:5px;height:5px;border-radius:50%;border:1px solid var(--ac);opacity:.75}
+.cell.full i{background:var(--ac)}
+.dtitle{display:flex;align-items:baseline;gap:10px;padding:15px 18px 0}
+.dtitle .d{font-size:15.5px}
+.dtitle .s{font-size:13px;color:var(--muted)}
+.dtitle .n{margin-left:auto;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.dtitle .n.full{color:var(--ac)}
+
+/* история */
+.dayrow{padding:15px 18px;border-bottom:1px solid var(--line)}
+.dayrow:last-child{border-bottom:0}
+.dayrow .top{display:flex;align-items:baseline;gap:10px}
+.dayrow .d{font-size:15.5px}
+.dayrow .s{font-size:13px;color:var(--muted)}
+.dayrow .n{margin-left:auto;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.dayrow .n.full{color:var(--sage)}
+.detail{margin-top:12px;padding-top:4px}
+.dbody{padding:2px 18px 14px}
+.detail div{display:flex;gap:10px;font-size:14.5px;padding:6px 0;color:var(--muted)}
+.detail .tm{margin-left:auto;font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--sage)}
+.detail .no{color:#7C8794}
+
+/* настройки */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:8px}
+.sw{aspect-ratio:1/1.35;border-radius:12px;border:1.5px solid transparent;position:relative;overflow:hidden;background-size:cover;background-position:center}
+.sw.on{border-color:var(--sand)}
+.slider{width:100%;margin:14px 0 4px;accent-color:var(--sand)}
+.note{font-size:13px;color:var(--muted);line-height:1.6}
+
+/* нав */
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;padding:6px 8px calc(6px + var(--safe-b));background:rgba(13,19,27,.82);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid var(--line)}
+nav button{flex:1;border:0;background:none;color:var(--muted);font:inherit;font-size:10.5px;padding:8px 0 6px;display:flex;flex-direction:column;align-items:center;gap:4px}
+nav button svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+nav button.on{color:var(--paper)}
+
+/* просмотр фото */
+#viewer{position:fixed;inset:0;background:rgba(8,12,17,.94);z-index:50;display:none;align-items:center;justify-content:center;padding:20px}
+#viewer img{max-width:100%;max-height:82%;border-radius:12px}
+#viewer .cap{position:absolute;bottom:calc(28px + var(--safe-b));font-size:13px;color:var(--muted)}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="bg"></div><div id="scrim"></div>
+<main id="view"></main>
+<nav id="nav"></nav>
+<div id="viewer"><img alt=""><div class="cap">Нажмите, чтобы закрыть</div></div>
+<input type="file" id="cam" accept="image/*" capture="environment" hidden>
+<input type="file" id="bgfile" accept="image/*" hidden>
+
+<script>
+/* ============ хранилище ============ */
+const KEY='tochno.v1';
+let mem=null, useLS=true;
+try{localStorage.setItem('_t','1');localStorage.removeItem('_t')}catch(e){useLS=false}
+function load(){
+  try{const r=useLS?localStorage.getItem(KEY):mem; if(r) return JSON.parse(r)}catch(e){}
+  return null;
+}
+function save(){
+  const s=JSON.stringify(S);
+  try{ if(useLS) localStorage.setItem(KEY,s); else mem=s; }
+  catch(e){ alert('Не хватило места в памяти. Скорее всего из-за фотографий — удалите фон-картинку или старые дни.'); }
+}
+
+/* ============ состояние ============ */
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const BGS=[
+ {id:'night', css:'linear-gradient(170deg,#1B2836,#141C26 60%,#101720)'},
+ {id:'moss',  css:'linear-gradient(165deg,#1D2A26,#141D1A 65%,#0F1614)'},
+ {id:'clay',  css:'linear-gradient(165deg,#2A211D,#1C1614 65%,#141010)'},
+ {id:'plum',  css:'linear-gradient(165deg,#241B2C,#181320 65%,#110E17)'},
+ {id:'slate', css:'linear-gradient(165deg,#232629,#17191C 65%,#111315)'},
+ {id:'sea',   css:'linear-gradient(165deg,#16292E,#101E22 65%,#0C1517)'}
+];
+const ACCENTS=[
+ {id:'sage',c:'#8FBBA4'},{id:'sand',c:'#E3C08C'},{id:'sky',c:'#8FB6D9'},
+ {id:'lilac',c:'#B6A9DE'},{id:'rose',c:'#DDA3A9'},{id:'mint',c:'#7FCBC4'}
+];
+const DEF={
+  scenarios:[
+    {id:uid(),name:'Рабочий день',items:[
+      {id:uid(),text:'Выключил свет во всех комнатах'},
+      {id:uid(),text:'Закрыл окна'},
+      {id:uid(),text:'Проверил плиту'},
+      {id:uid(),text:'Закрыл воду'},
+      {id:uid(),text:'Взял ключи и телефон'},
+      {id:uid(),text:'Запер дверь'}
+    ]},
+    {id:uid(),name:'Выходной',items:[
+      {id:uid(),text:'Проверил плиту'},
+      {id:uid(),text:'Закрыл воду'},
+      {id:uid(),text:'Запер дверь'}
+    ]}
+  ],
+  days:{},
+  bg:'night', scrim:55, bgphoto:null, accent:'sage'
+};
+let S=load()||DEF;
+let tab='today', pending=null, pendingPhoto=null, editing=null, openDay=null;
+let calY=new Date().getFullYear(), calM=new Date().getMonth();
+
+/* ============ утилиты ============ */
+const el=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function key(d){d=d||new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function yKey(){const d=new Date();d.setDate(d.getDate()-1);return key(d)}
+function human(k){
+  const [y,m,dd]=k.split('-').map(Number);
+  return new Date(y,m-1,dd).toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'});
+}
+function shortDate(k){
+  const [y,m,dd]=k.split('-').map(Number);
+  return new Date(y,m-1,dd).toLocaleDateString('ru-RU',{day:'numeric',month:'short',weekday:'short'});
+}
+function hhmm(ts){const d=new Date(ts);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
+const ICO={
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="#141C26" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5.5 5.5L20 6"/></svg>',
+  cam:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5A2 2 0 015 6.5h2l1.4-2h7.2L17 6.5h2a2 2 0 012 2V18a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><circle cx="12" cy="13" r="3.4"/></svg>',
+  x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  prev:'<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>',
+  next:'<svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>',
+  today:'<svg viewBox="0 0 24 24"><path d="M4 11.5l5 5 11-11"/></svg>',
+  scen:'<svg viewBox="0 0 24 24"><path d="M5 5h14M5 12h14M5 19h9"/></svg>',
+  hist:'<svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M8 2.5v4M16 2.5v4M3.5 10h17"/></svg>',
+  set:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M21.5 12h-3M5.5 12h-3M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1M18.7 18.7l-2.1-2.1M7.4 7.4L5.3 5.3"/></svg>'
+};
+
+/* ============ фон ============ */
+function paintBg(){
+  const b=el('#bg');
+  if(S.bgphoto){b.style.backgroundImage='url('+S.bgphoto+')';b.style.background='';b.style.backgroundImage='url('+S.bgphoto+')';b.style.backgroundSize='cover';b.style.backgroundPosition='center'}
+  else{const g=BGS.find(x=>x.id===S.bg)||BGS[0];b.style.backgroundImage=g.css}
+  el('#scrim').style.opacity=S.scrim/100;
+  const a=ACCENTS.find(x=>x.id===S.accent)||ACCENTS[0];
+  document.documentElement.style.setProperty('--ac',a.c);
+}
+
+/* ============ день ============ */
+function today(){return S.days[key()]}
+function assign(sc){
+  S.days[key()]={scenario:sc.name,items:sc.items.map((i,n)=>({id:uid(),text:i.text,pos:n,at:null,photo:null}))};
+  save();render();
+}
+
+/* ============ рендер ============ */
+function render(){
+  const v=el('#view');
+  if(tab==='today')v.innerHTML=vToday();
+  if(tab==='scen')v.innerHTML=editing?vEditor():vScen();
+  if(tab==='hist')v.innerHTML=vHist();
+  if(tab==='set')v.innerHTML=vSet();
+  el('#nav').innerHTML=[['today','Сегодня'],['scen','Сценарии'],['hist','История'],['set','Настройки']]
+    .map(([k,n])=>`<button data-tab="${k}" class="${tab===k?'on':''}">${ICO[k==='today'?'today':k==='scen'?'scen':k==='hist'?'hist':'set']}${n}</button>`).join('');
+  paintBg();
+}
+
+/* --- Сегодня --- */
+function vToday(){
+  const d=today();
+  const hd=`<div class="daylabel">Сегодня</div><h1 class="date">${human(key()).replace(/, /,',<br><b>')}</b></h1>`;
+  if(!d){
+    const y=S.days[yKey()];
+    return hd+`<p class="sub" style="margin-top:22px">Сценарий на сегодня не выбран.</p>`+
+    (y?`<button class="big" data-same="1"><b style="font-weight:500">Как вчера</b><span>${esc(y.scenario)}</span></button>`:'')+
+    S.scenarios.map(s=>`<button class="big" data-pick="${s.id}">${esc(s.name)}<span>${s.items.length} ${plural(s.items.length)}</span></button>`).join('')+
+    (S.scenarios.length?'':`<div class="empty">Сценариев пока нет.<br>Создайте первый на вкладке «Сценарии».</div>`);
+  }
+  const done=d.items.filter(i=>i.at).length, all=d.items.length;
+  return hd+
+  `<div class="scenline"><span class="scenname">${esc(d.scenario)}</span>
+   <span class="count ${done===all?'done':''}">${done} из ${all}</span></div>`+
+  `<ul class="list">`+d.items.map(i=>{
+    if(pending===i.id) return `<li class="item pending"><div class="row"><div class="box"></div><div class="txt">${esc(i.text)}</div></div>
+      <div class="confirm">
+        <button class="cbtn cam ${pendingPhoto?'has':''}" data-photo="1">${ICO.cam}</button>
+        <button class="cbtn" data-yes="${i.id}">Подтвердить</button>
+        <button class="cbtn ghost" data-no="1">Отмена</button>
+      </div></li>`;
+    return `<li class="item ${i.at?'locked':''}" ${i.at?'':`data-tap="${i.id}"`}>
+      <div class="row"><div class="box">${ICO.check}</div><div class="txt">${esc(i.text)}</div>
+      ${i.at?`<span class="stamp">${hhmm(i.at)}</span>`:''}
+      ${i.photo?`<img class="thumb" src="${i.photo}" data-zoom="${i.photo}" alt="">`:''}</div></li>`;
+  }).join('')+`</ul>`+
+  (done===all?`<div class="empty" style="color:var(--sage);padding:32px 20px 8px">Всё отмечено. Можно идти.</div>`:'')+
+  `<div style="text-align:center"><button class="link" data-reset="1">Сменить сценарий на сегодня</button></div>`;
+}
+function plural(n){const a=n%10,b=n%100;return a===1&&b!==11?'пункт':a>=2&&a<=4&&(b<10||b>=20)?'пункта':'пунктов'}
+
+/* --- Сценарии --- */
+function vScen(){
+  return `<h2 class="h">Сценарии</h2><p class="sub">Наборы пунктов, которые вы назначаете на день.</p>`+
+  (S.scenarios.length?`<div class="card">`+S.scenarios.map(s=>
+    `<div class="srow" data-edit="${s.id}"><span class="nm">${esc(s.name)}</span><span class="ct">${s.items.length}</span></div>`).join('')+`</div>`
+   :`<div class="empty">Пусто. Создайте первый сценарий — например, «Рабочий день».</div>`)+
+  `<button class="big" style="margin-top:14px" data-new="1">Новый сценарий</button>`;
+}
+function vEditor(){
+  const s=S.scenarios.find(x=>x.id===editing);
+  if(!s){editing=null;return vScen()}
+  return `<button class="link" data-back="1">← Сценарии</button>
+  <input type="text" id="nm" value="${esc(s.name)}" placeholder="Название сценария" style="margin:8px 0 20px">
+  ${s.items.map(i=>`<div class="editrow"><span class="t">${esc(i.text)}</span><button class="x" data-del="${i.id}">${ICO.x}</button></div>`).join('')||'<p class="sub">Пунктов пока нет.</p>'}
+  <div class="addbar"><input type="text" id="ni" placeholder="Новый пункт"><button data-add="1">Добавить</button></div>
+  <div style="text-align:center;margin-top:34px"><button class="link danger" data-drop="1">Удалить сценарий</button></div>`;
+}
+
+/* --- История --- */
+function vHist(){
+  const first=new Date(calY,calM,1);
+  const shift=(first.getDay()+6)%7;              // неделя с понедельника
+  const total=new Date(calY,calM+1,0).getDate();
+  const tk=key(), now=new Date();
+  const future=(calY>now.getFullYear())||(calY===now.getFullYear()&&calM>now.getMonth());
+  const month=first.toLocaleDateString('ru-RU',{month:'long',year:'numeric'});
+
+  let cells='';
+  for(let i=0;i<shift;i++)cells+='<div></div>';
+  for(let n=1;n<=total;n++){
+    const k=calY+'-'+String(calM+1).padStart(2,'0')+'-'+String(n).padStart(2,'0');
+    const d=S.days[k];
+    const done=d?d.items.filter(i=>i.at).length:0;
+    const cl=['cell',d?'has':'',k===tk?'now':'',openDay===k?'sel':'',d&&done===d.items.length?'full':''].filter(Boolean).join(' ');
+    cells+=`<div class="${cl}" ${d?`data-day="${k}"`:''}>${n}${d?'<i></i>':''}</div>`;
+  }
+
+  const d=openDay?S.days[openDay]:null;
+  let panel='';
+  if(d){
+    const done=d.items.filter(i=>i.at).length;
+    panel=`<div class="card" style="margin-top:16px">
+      <div class="dtitle"><span class="d">${shortDate(openDay)}</span><span class="s">${esc(d.scenario)}</span>
+      <span class="n ${done===d.items.length?'full':''}">${done}/${d.items.length}</span></div>
+      <div class="dbody"><div class="detail">`+d.items.map(i=>
+        `<div class="${i.at?'':'no'}">${esc(i.text)}<span class="tm" ${i.at?'':'style="color:#7C8794"'}>${i.at?hhmm(i.at):'—'}</span></div>`
+      ).join('')+`</div></div></div>`;
+  } else {
+    panel=`<p class="sub" style="text-align:center;margin:22px 0 0">${Object.keys(S.days).length?'Выберите день с отметкой.':'Отмеченные дни появятся в календаре.'}</p>`;
+  }
+
+  return `<h2 class="h">История</h2><p class="sub">Точками отмечены дни с записями. Закрашенная — все пункты выполнены.</p>
+  <div class="card" style="padding:12px 12px 16px">
+    <div class="calhead">
+      <button class="arw" data-mon="-1">${ICO.prev}</button>
+      <span class="m">${month.charAt(0).toUpperCase()+month.slice(1)}</span>
+      <button class="arw" data-mon="1" ${future?'disabled':''}>${ICO.next}</button>
+    </div>
+    <div class="wk"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div>
+    <div class="days">${cells}</div>
+  </div>`+panel;
+}
+
+/* --- Настройки --- */
+function vSet(){
+  return `<h2 class="h">Настройки</h2><p class="sub">Фон главного экрана.</p>
+  <div class="grid">${BGS.map(b=>`<div class="sw ${(!S.bgphoto&&S.bg===b.id)?'on':''}" data-bg="${b.id}" style="background-image:${b.css}"></div>`).join('')}</div>
+  <button class="big" style="margin-top:12px" data-bgphoto="1">Своя картинка<span>${S.bgphoto?'Загружена — нажмите, чтобы заменить':'Из галереи телефона'}</span></button>
+  ${S.bgphoto?`<div style="text-align:center"><button class="link" data-nobg="1">Убрать картинку</button></div>`:''}
+  <p class="sub" style="margin:26px 0 0">Затемнение — чтобы текст читался поверх фона.</p>
+  <input class="slider" type="range" min="15" max="90" value="${S.scrim}" id="sc">
+  <p class="sub" style="margin:30px 0 12px">Цвет галочек и отметок времени.</p>
+  <div class="grid">${ACCENTS.map(a=>`<div class="sw ${S.accent===a.id?'on':''}" data-ac="${a.id}" style="background:${a.c};aspect-ratio:1/.62"></div>`).join('')}</div>
+  <p class="note" style="margin-top:34px">Все записи хранятся только на этом устройстве. Приложение ничего не отправляет в сеть и работает без интернета.</p>
+  <div style="text-align:center;margin-top:18px"><button class="link danger" data-wipe="1">Стереть все данные</button></div>`;
+}
+
+/* ============ события ============ */
+document.addEventListener('click',e=>{
+  const t=e.target.closest('[data-tab],[data-tap],[data-yes],[data-no],[data-photo],[data-pick],[data-same],[data-reset],[data-edit],[data-new],[data-back],[data-del],[data-add],[data-drop],[data-day],[data-mon],[data-ac],[data-bg],[data-bgphoto],[data-nobg],[data-wipe],[data-zoom]');
+  if(!t)return;
+  const D=t.dataset;
+
+  if(D.zoom){const v=el('#viewer');v.querySelector('img').src=D.zoom;v.style.display='flex';return}
+  if(D.tab){
+    if(editing&&D.tab!=='scen')editing=null;
+    if(D.tab==='hist'){const n=new Date();calY=n.getFullYear();calM=n.getMonth();openDay=S.days[key()]?key():null}
+    tab=D.tab;pending=null;pendingPhoto=null;render();return;
+  }
+
+  /* сегодня */
+  if(D.tap){pending=D.tap;pendingPhoto=null;render();return}
+  if(D.no){pending=null;pendingPhoto=null;render();return}
+  if(D.photo){el('#cam').click();return}
+  if(D.yes){
+    const it=today().items.find(i=>i.id===D.yes);
+    it.at=Date.now(); if(pendingPhoto)it.photo=pendingPhoto;
+    pending=null;pendingPhoto=null;save();render();return;
+  }
+  if(D.pick){assign(S.scenarios.find(s=>s.id===D.pick));return}
+  if(D.same){
+    const y=S.days[yKey()];
+    S.days[key()]={scenario:y.scenario,items:y.items.map((i,n)=>({id:uid(),text:i.text,pos:n,at:null,photo:null}))};
+    save();render();return;
+  }
+  if(D.reset){
+    const d=today();
+    if(d.items.some(i=>i.at)&&!confirm('Отметки за сегодня будут стёрты. Сменить сценарий?'))return;
+    delete S.days[key()];save();render();return;
+  }
+
+  /* сценарии */
+  if(D.edit){editing=D.edit;render();return}
+  if(D.new){const s={id:uid(),name:'Новый сценарий',items:[]};S.scenarios.push(s);editing=s.id;save();render();return}
+  if(D.back){saveName();editing=null;render();return}
+  if(D.del){saveName();const s=S.scenarios.find(x=>x.id===editing);s.items=s.items.filter(i=>i.id!==D.del);save();render();return}
+  if(D.add){addItem();return}
+  if(D.drop){
+    if(!confirm('Удалить сценарий? Прошлые дни останутся в истории.'))return;
+    S.scenarios=S.scenarios.filter(x=>x.id!==editing);editing=null;save();render();return;
+  }
+
+  /* история */
+  if(D.day){openDay=openDay===D.day?null:D.day;render();return}
+  if(D.mon){
+    const m=calM+ +D.mon;
+    calY+=Math.floor(m/12); calM=(m%12+12)%12;
+    render();return;
+  }
+  if(D.ac){S.accent=D.ac;save();render();return}
+
+  /* настройки */
+  if(D.bg){S.bg=D.bg;S.bgphoto=null;save();render();return}
+  if(D.bgphoto){el('#bgfile').click();return}
+  if(D.nobg){S.bgphoto=null;save();render();return}
+  if(D.wipe){if(confirm('Стереть все сценарии и всю историю?')){S=JSON.parse(JSON.stringify(DEF));S.days={};save();render()}return}
+});
+function saveName(){const n=el('#nm');if(n&&editing){const s=S.scenarios.find(x=>x.id===editing);if(s){s.name=n.value.trim()||'Без названия';save()}}}
+function addItem(){
+  const f=el('#ni'); if(!f||!f.value.trim())return;
+  saveName();
+  S.scenarios.find(x=>x.id===editing).items.push({id:uid(),text:f.value.trim()});
+  save();render();
+  const n=el('#ni'); if(n)n.focus();
+}
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='ni'){e.preventDefault();addItem()}});
+document.addEventListener('input',e=>{if(e.target.id==='sc'){S.scrim=+e.target.value;el('#scrim').style.opacity=S.scrim/100;save()}});
+el('#viewer').addEventListener('click',()=>el('#viewer').style.display='none');
+
+/* фото */
+function shrink(file,max,q){return new Promise(res=>{
+  const r=new FileReader();
+  r.onload=()=>{const im=new Image();im.onload=()=>{
+    const k=Math.min(1,max/Math.max(im.width,im.height));
+    const c=document.createElement('canvas');c.width=im.width*k;c.height=im.height*k;
+    c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+    res(c.toDataURL('image/jpeg',q));
+  };im.src=r.result};
+  r.readAsDataURL(file);
+})}
+el('#cam').addEventListener('change',async e=>{
+  if(!e.target.files[0])return;
+  pendingPhoto=await shrink(e.target.files[0],900,.6);
+  e.target.value='';render();
+});
+el('#bgfile').addEventListener('change',async e=>{
+  if(!e.target.files[0])return;
+  S.bgphoto=await shrink(e.target.files[0],1400,.72);
+  e.target.value='';save();render();
+});
+
+/* смена суток, пока приложение открыто */
+let curDay=key();
+setInterval(()=>{if(key()!==curDay){curDay=key();openDay=null;if(tab==='today')render()}},30000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&key()!==curDay){curDay=key();render()}});
+
+render();
+
+/* офлайн-режим: только для http(s), локальный файл работает как раньше */
+if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+}
+</script>
+</body>
+</html>
