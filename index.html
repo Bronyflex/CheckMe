@@ -64,7 +64,12 @@ body{
 .thumb{flex:none;width:34px;height:34px;border-radius:8px;object-fit:cover;margin-left:8px;border:1px solid var(--line)}
 
 /* оверлей подтверждения */
-.confirm{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:10px;animation:pop .18s ease-out}
+.confirm{display:flex;align-items:center;gap:8px;padding:0 2px 15px;animation:pop .18s ease-out}
+.confirm input{flex:1;min-width:0;font:inherit;font-size:15px;color:var(--paper);background:rgba(238,242,246,.07);border:1px solid var(--line);border-radius:11px;padding:11px 13px}
+.confirm input:focus{outline:none;border-color:var(--ac)}
+.confirm .btns{display:flex;gap:8px;padding:0 2px 15px}
+.nt{font-size:13.5px;color:var(--muted);line-height:1.35;margin-top:5px}
+.nt:before{content:'— '}
 @keyframes pop{from{opacity:0;transform:scale(.97)}}
 .cbtn{border:0;font:inherit;font-size:14.5px;font-weight:500;padding:10px 18px;border-radius:11px;color:var(--ink);background:var(--sage)}
 .cbtn.ghost{background:rgba(238,242,246,.12);color:var(--paper)}
@@ -96,6 +101,11 @@ input[type=text]:focus{outline:none;border-color:var(--sand)}
 .x svg{width:16px;height:16px}
 .addbar{display:flex;gap:8px;margin-top:16px}
 .addbar button{flex:none;border:0;font:inherit;font-size:15px;font-weight:500;background:var(--sand);color:var(--ink);border-radius:11px;padding:0 18px}
+
+/* дни недели в сценарии */
+.wdays{display:flex;gap:6px;margin:4px 0 22px}
+.wd{flex:1;text-align:center;font-size:13px;color:var(--muted);background:rgba(238,242,246,.06);border:1px solid var(--line);border-radius:9px;padding:9px 0;transition:.15s}
+.wd.on{background:var(--ac);border-color:var(--ac);color:var(--ink);font-weight:500}
 
 /* группы сценариев внутри дня */
 .grp{display:flex;align-items:baseline;gap:10px;margin:24px 0 0;padding-bottom:9px;border-bottom:1px solid var(--line)}
@@ -229,7 +239,7 @@ const DEF={
 let S=load()||DEF;
 let tab='today', pending=null, pendingPhoto=null, editing=null, openDay=null;
 let calY=new Date().getFullYear(), calM=new Date().getMonth();
-let picked=new Set(), picking=false;
+let picked=new Set(), picking=false, pendingNote='';
 
 /* ============ утилиты ============ */
 const el=s=>document.querySelector(s);
@@ -265,6 +275,7 @@ function paintBg(){
   el('#scrim').style.opacity=S.scrim/100;
   const a=ACCENTS.find(x=>x.id===S.accent)||ACCENTS[0];
   document.documentElement.style.setProperty('--ac',a.c);
+  el('#view').style.zoom=(S.fs||100)/100;
 }
 
 /* ============ день ============ */
@@ -289,8 +300,24 @@ function pour(day,sc){
 }
 function names(d){return (d.scenarios||[d.scenario]).join(' · ')}
 
+/* день считается несобранным, пока в нём нет пунктов */
+function ready(d){return d && d.items && d.items.length}
+
+/* автосборка: сценарии, отмеченные на этот день недели */
+function autoBuild(){
+  const k=key();
+  if(S.days[k])return;                       // уже собран или намеренно очищен
+  const wd=new Date().getDay();
+  const due=S.scenarios.filter(s=>(s.days||[]).includes(wd) && s.items.length);
+  if(!due.length)return;
+  const day={scenarios:[],items:[],auto:true};
+  due.forEach(sc=>pour(day,sc));
+  S.days[k]=day;save();
+}
+
 /* ============ рендер ============ */
 function render(){
+  autoBuild();
   const v=el('#view');
   if(tab==='today')v.innerHTML=vToday();
   if(tab==='scen')v.innerHTML=editing?vEditor():vScen();
@@ -305,12 +332,16 @@ function render(){
 function vItem(i){
   if(pending===i.id) return `<li class="item pending"><div class="row"><div class="box"></div><div class="txt">${esc(i.text)}</div></div>
     <div class="confirm">
+      <input type="text" id="note" placeholder="Заметка, если нужна" value="${esc(pendingNote)}">
       <button class="cbtn cam ${pendingPhoto?'has':''}" data-photo="1">${ICO.cam}</button>
-      <button class="cbtn" data-yes="${i.id}">Подтвердить</button>
+    </div>
+    <div class="confirm btns" style="justify-content:flex-end">
       <button class="cbtn ghost" data-no="1">Отмена</button>
+      <button class="cbtn" data-yes="${i.id}">Подтвердить</button>
     </div></li>`;
   return `<li class="item ${i.at?'locked':''}" ${i.at?'':`data-tap="${i.id}"`}>
-    <div class="row"><div class="box">${ICO.check}</div><div class="txt">${esc(i.text)}</div>
+    <div class="row"><div class="box">${ICO.check}</div>
+    <div style="min-width:0"><div class="txt">${esc(i.text)}</div>${i.note?`<div class="nt">${esc(i.note)}</div>`:''}</div>
     ${i.at?`<span class="stamp">${hhmm(i.at)}</span>`:''}
     ${i.photo?`<img class="thumb" src="${i.photo}" data-zoom="${i.photo}" alt="">`:''}</div></li>`;
 }
@@ -319,7 +350,7 @@ function vItem(i){
 function vPicker(mode){
   const used=mode==='add'?today().scenarios:[];
   const free=S.scenarios.filter(s=>!used.includes(s.name));
-  const y=S.days[yKey()];
+  const y=ready(S.days[yKey()])?S.days[yKey()]:null;
   if(!S.scenarios.length)
     return `<div class="empty">Сценариев пока нет.<br>Создайте первый на вкладке «Сценарии».</div>`;
   if(!free.length)
@@ -341,7 +372,7 @@ function vPicker(mode){
 function vToday(){
   const d=today();
   const hd=`<div class="daylabel">Сегодня</div><h1 class="date">${human(key()).replace(/, /,',<br><b>')}</b></h1>`;
-  if(!d)return hd+vPicker('new');
+  if(!ready(d))return hd+vPicker('new');
   if(picking)return hd+vPicker('add');
 
   const done=d.items.filter(i=>i.at).length, all=d.items.length;
@@ -372,7 +403,11 @@ function plural(n){const a=n%10,b=n%100;return a===1&&b!==11?'пункт':a>=2&&
 function vScen(){
   return `<h2 class="h">Сценарии</h2><p class="sub">Наборы пунктов, которые вы назначаете на день.</p>`+
   (S.scenarios.length?`<div class="card">`+S.scenarios.map(s=>
-    `<div class="srow" data-edit="${s.id}"><span class="nm">${esc(s.name)}</span><span class="ct">${s.items.length}</span></div>`).join('')+`</div>`
+    `<div class="srow" data-edit="${s.id}"><div><span class="nm">${esc(s.name)}</span>${
+      (s.days||[]).length?`<div class="ct" style="margin-top:3px">${
+        [[1,'Пн'],[2,'Вт'],[3,'Ср'],[4,'Чт'],[5,'Пт'],[6,'Сб'],[0,'Вс']]
+        .filter(([n])=>s.days.includes(n)).map(([,l])=>l).join(' ')}</div>`:''
+    }</div><span class="ct">${s.items.length}</span></div>`).join('')+`</div>`
    :`<div class="empty">Пусто. Создайте первый сценарий — например, «Рабочий день».</div>`)+
   `<button class="big" style="margin-top:14px" data-new="1">Новый сценарий</button>`;
 }
@@ -380,7 +415,10 @@ function vEditor(){
   const s=S.scenarios.find(x=>x.id===editing);
   if(!s){editing=null;return vScen()}
   return `<button class="link" data-back="1">← Сценарии</button>
-  <input type="text" id="nm" value="${esc(s.name)}" placeholder="Название сценария" style="margin:8px 0 20px">
+  <input type="text" id="nm" value="${esc(s.name)}" placeholder="Название сценария" style="margin:8px 0 14px">
+  <p class="sub" style="margin:0 0 8px">Назначать автоматически в эти дни:</p>
+  <div class="wdays">${[[1,'Пн'],[2,'Вт'],[3,'Ср'],[4,'Чт'],[5,'Пт'],[6,'Сб'],[0,'Вс']]
+    .map(([n,l])=>`<div class="wd ${(s.days||[]).includes(n)?'on':''}" data-wd="${n}">${l}</div>`).join('')}</div>
   ${s.items.map(i=>`<div class="editrow"><span class="t">${esc(i.text)}</span><button class="x" data-del="${i.id}">${ICO.x}</button></div>`).join('')||'<p class="sub">Пунктов пока нет.</p>'}
   <div class="addbar"><input type="text" id="ni" placeholder="Новый пункт"><button data-add="1">Добавить</button></div>
   <div style="text-align:center;margin-top:34px"><button class="link danger" data-drop="1">Удалить сценарий</button></div>`;
@@ -399,7 +437,7 @@ function vHist(){
   for(let i=0;i<shift;i++)cells+='<div></div>';
   for(let n=1;n<=total;n++){
     const k=calY+'-'+String(calM+1).padStart(2,'0')+'-'+String(n).padStart(2,'0');
-    const d=S.days[k];
+    const d=ready(S.days[k])?S.days[k]:null;
     const done=d?d.items.filter(i=>i.at).length:0;
     const cl=['cell',d?'has':'',k===tk?'now':'',openDay===k?'sel':'',d&&done===d.items.length?'full':''].filter(Boolean).join(' ');
     cells+=`<div class="${cl}" ${d?`data-day="${k}"`:''}>${n}${d?'<i></i>':''}</div>`;
@@ -442,6 +480,8 @@ function vSet(){
   <div class="grid">${BGS.map(b=>`<div class="sw ${(!S.bgphoto&&S.bg===b.id)?'on':''}" data-bg="${b.id}" style="background-image:${b.css}"></div>`).join('')}</div>
   <button class="big" style="margin-top:12px" data-bgphoto="1">Своя картинка<span>${S.bgphoto?'Загружена — нажмите, чтобы заменить':'Из галереи телефона'}</span></button>
   ${S.bgphoto?`<div style="text-align:center"><button class="link" data-nobg="1">Убрать картинку</button></div>`:''}
+  <p class="sub" style="margin:30px 0 0">Размер текста.</p>
+  <input class="slider" type="range" min="85" max="140" step="5" value="${S.fs||100}" id="fs">
   <p class="sub" style="margin:26px 0 0">Затемнение — чтобы текст читался поверх фона.</p>
   <input class="slider" type="range" min="15" max="90" value="${S.scrim}" id="sc">
   <p class="sub" style="margin:30px 0 12px">Цвет галочек и отметок времени.</p>
@@ -452,7 +492,7 @@ function vSet(){
 
 /* ============ события ============ */
 document.addEventListener('click',e=>{
-  const t=e.target.closest('[data-tab],[data-tap],[data-yes],[data-no],[data-photo],[data-pick],[data-same],[data-reset],[data-addscen],[data-cancel],[data-start],[data-edit],[data-new],[data-back],[data-del],[data-add],[data-drop],[data-day],[data-mon],[data-ac],[data-bg],[data-bgphoto],[data-nobg],[data-wipe],[data-zoom]');
+  const t=e.target.closest('[data-tab],[data-tap],[data-yes],[data-no],[data-photo],[data-pick],[data-same],[data-reset],[data-addscen],[data-cancel],[data-start],[data-edit],[data-new],[data-back],[data-del],[data-add],[data-wd],[data-drop],[data-day],[data-mon],[data-ac],[data-bg],[data-bgphoto],[data-nobg],[data-wipe],[data-zoom]');
   if(!t)return;
   const D=t.dataset;
 
@@ -464,13 +504,16 @@ document.addEventListener('click',e=>{
   }
 
   /* сегодня */
-  if(D.tap){pending=D.tap;pendingPhoto=null;render();return}
-  if(D.no){pending=null;pendingPhoto=null;render();return}
-  if(D.photo){el('#cam').click();return}
+  if(D.tap){pending=D.tap;pendingPhoto=null;pendingNote='';render();return}
+  if(D.no){pending=null;pendingPhoto=null;pendingNote='';render();return}
+  if(D.photo){const n=el('#note');if(n)pendingNote=n.value;el('#cam').click();return}
   if(D.yes){
+    const n=el('#note'); if(n)pendingNote=n.value;
     const it=today().items.find(i=>i.id===D.yes);
-    it.at=Date.now(); if(pendingPhoto)it.photo=pendingPhoto;
-    pending=null;pendingPhoto=null;save();render();return;
+    it.at=Date.now();
+    if(pendingPhoto)it.photo=pendingPhoto;
+    if(pendingNote.trim())it.note=pendingNote.trim();
+    pending=null;pendingPhoto=null;pendingNote='';save();render();return;
   }
   if(D.pick){picked.has(D.pick)?picked.delete(D.pick):picked.add(D.pick);render();return}
   if(D.addscen){picking=true;picked=new Set();render();return}
@@ -491,7 +534,7 @@ document.addEventListener('click',e=>{
   if(D.reset){
     const d=today();
     if(d.items.some(i=>i.at)&&!confirm('Все отметки за сегодня будут стёрты. Собрать день заново?'))return;
-    delete S.days[key()];picking=false;picked=new Set();save();render();return;
+    S.days[key()]={scenarios:[],items:[]};picking=false;picked=new Set();save();render();return;
   }
 
   /* сценарии */
@@ -499,6 +542,13 @@ document.addEventListener('click',e=>{
   if(D.new){const s={id:uid(),name:'Новый сценарий',items:[]};S.scenarios.push(s);editing=s.id;save();render();return}
   if(D.back){saveName();editing=null;render();return}
   if(D.del){saveName();const s=S.scenarios.find(x=>x.id===editing);s.items=s.items.filter(i=>i.id!==D.del);save();render();return}
+  if(D.wd){
+    saveName();
+    const s=S.scenarios.find(x=>x.id===editing), n=+D.wd;
+    s.days=s.days||[];
+    s.days.includes(n)?s.days=s.days.filter(x=>x!==n):s.days.push(n);
+    save();render();return;
+  }
   if(D.add){addItem();return}
   if(D.drop){
     if(!confirm('Удалить сценарий? Прошлые дни останутся в истории.'))return;
@@ -529,7 +579,11 @@ function addItem(){
   const n=el('#ni'); if(n)n.focus();
 }
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='ni'){e.preventDefault();addItem()}});
-document.addEventListener('input',e=>{if(e.target.id==='sc'){S.scrim=+e.target.value;el('#scrim').style.opacity=S.scrim/100;save()}});
+document.addEventListener('input',e=>{
+  if(e.target.id==='sc'){S.scrim=+e.target.value;el('#scrim').style.opacity=S.scrim/100;save()}
+  if(e.target.id==='fs'){S.fs=+e.target.value;el('#view').style.zoom=S.fs/100;save()}
+  if(e.target.id==='note'){pendingNote=e.target.value}
+});
 el('#viewer').addEventListener('click',()=>el('#viewer').style.display='none');
 
 /* фото */
@@ -544,7 +598,7 @@ function shrink(file,max,q){return new Promise(res=>{
   r.readAsDataURL(file);
 })}
 el('#cam').addEventListener('change',async e=>{
-  if(!e.target.files[0])return;
+  if(!e.target.files[0]){render();return}
   pendingPhoto=await shrink(e.target.files[0],900,.6);
   e.target.value='';render();
 });
@@ -564,6 +618,8 @@ render();
 
 /* офлайн-режим: только для http(s), локальный файл работает как раньше */
 if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){
+  /* просим браузер не вычищать наши данные при нехватке места */
+  if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
   window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 }
 </script>
