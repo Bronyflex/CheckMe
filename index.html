@@ -97,6 +97,24 @@ input[type=text]:focus{outline:none;border-color:var(--sand)}
 .addbar{display:flex;gap:8px;margin-top:16px}
 .addbar button{flex:none;border:0;font:inherit;font-size:15px;font-weight:500;background:var(--sand);color:var(--ink);border-radius:11px;padding:0 18px}
 
+/* группы сценариев внутри дня */
+.grp{display:flex;align-items:baseline;gap:10px;margin:24px 0 0;padding-bottom:9px;border-bottom:1px solid var(--line)}
+.grp .g{font-size:14px;font-weight:500}
+.grp .c{margin-left:auto;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.grp .c.full{color:var(--ac)}
+
+/* выбор сценариев */
+.pk{display:flex;align-items:center;gap:14px;padding:15px 18px;border-bottom:1px solid var(--line)}
+.pk:last-child{border-bottom:0}
+.pk .nm{font-size:16px}
+.pk .ct{font-size:13px;color:var(--muted);margin-top:2px}
+.pk .bx{flex:none;width:22px;height:22px;border:1.5px solid var(--muted);border-radius:7px;display:grid;place-items:center;margin-left:auto;transition:.15s}
+.pk.on .bx{background:var(--ac);border-color:var(--ac)}
+.pk .bx svg{width:13px;height:13px;opacity:0}
+.pk.on .bx svg{opacity:1}
+.start{display:block;width:100%;border:0;font:inherit;font-size:16px;font-weight:500;background:var(--ac);color:var(--ink);border-radius:13px;padding:15px;margin-top:16px}
+.start:disabled{background:rgba(238,242,246,.1);color:#5D6874}
+
 /* календарь */
 .calhead{display:flex;align-items:center;justify-content:space-between;padding:4px 6px 14px}
 .calhead .m{font-size:16.5px;font-weight:500}
@@ -127,6 +145,7 @@ input[type=text]:focus{outline:none;border-color:var(--sand)}
 .dayrow .n.full{color:var(--sage)}
 .detail{margin-top:12px;padding-top:4px}
 .dbody{padding:2px 18px 14px}
+.gsub{font-size:12.5px;color:var(--muted);margin:12px 0 2px;letter-spacing:.02em}
 .detail div{display:flex;gap:10px;font-size:14.5px;padding:6px 0;color:var(--muted)}
 .detail .tm{margin-left:auto;font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--sage)}
 .detail .no{color:#7C8794}
@@ -210,6 +229,7 @@ const DEF={
 let S=load()||DEF;
 let tab='today', pending=null, pendingPhoto=null, editing=null, openDay=null;
 let calY=new Date().getFullYear(), calM=new Date().getMonth();
+let picked=new Set(), picking=false;
 
 /* ============ утилиты ============ */
 const el=s=>document.querySelector(s);
@@ -249,10 +269,25 @@ function paintBg(){
 
 /* ============ день ============ */
 function today(){return S.days[key()]}
-function assign(sc){
-  S.days[key()]={scenario:sc.name,items:sc.items.map((i,n)=>({id:uid(),text:i.text,pos:n,at:null,photo:null}))};
-  save();render();
+
+/* старые дни хранили один сценарий — приводим к общему виду */
+function migrate(){
+  let ch=false;
+  Object.values(S.days).forEach(d=>{
+    if(!d.scenarios){
+      d.scenarios=[d.scenario||'День'];
+      d.items.forEach(i=>{if(!i.g)i.g=d.scenarios[0]});
+      ch=true;
+    }
+  });
+  if(ch)save();
 }
+
+function pour(day,sc){
+  if(!day.scenarios.includes(sc.name))day.scenarios.push(sc.name);
+  sc.items.forEach(it=>day.items.push({id:uid(),text:it.text,g:sc.name,pos:day.items.length,at:null,photo:null}));
+}
+function names(d){return (d.scenarios||[d.scenario]).join(' · ')}
 
 /* ============ рендер ============ */
 function render(){
@@ -267,35 +302,70 @@ function render(){
 }
 
 /* --- Сегодня --- */
+function vItem(i){
+  if(pending===i.id) return `<li class="item pending"><div class="row"><div class="box"></div><div class="txt">${esc(i.text)}</div></div>
+    <div class="confirm">
+      <button class="cbtn cam ${pendingPhoto?'has':''}" data-photo="1">${ICO.cam}</button>
+      <button class="cbtn" data-yes="${i.id}">Подтвердить</button>
+      <button class="cbtn ghost" data-no="1">Отмена</button>
+    </div></li>`;
+  return `<li class="item ${i.at?'locked':''}" ${i.at?'':`data-tap="${i.id}"`}>
+    <div class="row"><div class="box">${ICO.check}</div><div class="txt">${esc(i.text)}</div>
+    ${i.at?`<span class="stamp">${hhmm(i.at)}</span>`:''}
+    ${i.photo?`<img class="thumb" src="${i.photo}" data-zoom="${i.photo}" alt="">`:''}</div></li>`;
+}
+
+/* выбор сценариев: mode 'new' — на пустой день, 'add' — докинуть к текущему */
+function vPicker(mode){
+  const used=mode==='add'?today().scenarios:[];
+  const free=S.scenarios.filter(s=>!used.includes(s.name));
+  const y=S.days[yKey()];
+  if(!S.scenarios.length)
+    return `<div class="empty">Сценариев пока нет.<br>Создайте первый на вкладке «Сценарии».</div>`;
+  if(!free.length)
+    return `<div class="empty">Все сценарии уже назначены на сегодня.</div>
+      <div style="text-align:center"><button class="link" data-cancel="1">Назад</button></div>`;
+
+  return `<p class="sub" style="margin-top:22px">${mode==='add'?'Что ещё добавить к сегодняшнему дню?':'Выберите один или несколько сценариев на сегодня.'}</p>`+
+  (mode==='new'&&y?`<button class="big" data-same="1"><b style="font-weight:500">Как вчера</b><span>${esc(names(y))}</span></button>`:'')+
+  `<div class="card">`+free.map(s=>
+    `<div class="pk ${picked.has(s.id)?'on':''}" data-pick="${s.id}">
+      <div><div class="nm">${esc(s.name)}</div><div class="ct">${s.items.length} ${plural(s.items.length)}</div></div>
+      <div class="bx">${ICO.check}</div>
+    </div>`).join('')+`</div>`+
+  `<button class="start" data-start="${mode}" ${picked.size?'':'disabled'}>${
+     mode==='add'?'Добавить':'Начать день'}${picked.size?' · '+picked.size:''}</button>`+
+  (mode==='add'?`<div style="text-align:center"><button class="link" data-cancel="1">Отмена</button></div>`:'');
+}
+
 function vToday(){
   const d=today();
   const hd=`<div class="daylabel">Сегодня</div><h1 class="date">${human(key()).replace(/, /,',<br><b>')}</b></h1>`;
-  if(!d){
-    const y=S.days[yKey()];
-    return hd+`<p class="sub" style="margin-top:22px">Сценарий на сегодня не выбран.</p>`+
-    (y?`<button class="big" data-same="1"><b style="font-weight:500">Как вчера</b><span>${esc(y.scenario)}</span></button>`:'')+
-    S.scenarios.map(s=>`<button class="big" data-pick="${s.id}">${esc(s.name)}<span>${s.items.length} ${plural(s.items.length)}</span></button>`).join('')+
-    (S.scenarios.length?'':`<div class="empty">Сценариев пока нет.<br>Создайте первый на вкладке «Сценарии».</div>`);
-  }
+  if(!d)return hd+vPicker('new');
+  if(picking)return hd+vPicker('add');
+
   const done=d.items.filter(i=>i.at).length, all=d.items.length;
+  const multi=d.scenarios.length>1;
+  const body=d.scenarios.map(g=>{
+    const its=d.items.filter(i=>i.g===g);
+    if(!its.length)return '';
+    const gd=its.filter(i=>i.at).length;
+    return (multi?`<div class="grp"><span class="g">${esc(g)}</span>
+      <span class="c ${gd===its.length?'full':''}">${gd}/${its.length}</span></div>`:'')+
+      `<ul class="list">`+its.map(vItem).join('')+`</ul>`;
+  }).join('');
+
   return hd+
-  `<div class="scenline"><span class="scenname">${esc(d.scenario)}</span>
+  `<div class="scenline"><span class="scenname">${multi?d.scenarios.length+' '+splural(d.scenarios.length):esc(d.scenarios[0])}</span>
    <span class="count ${done===all?'done':''}">${done} из ${all}</span></div>`+
-  `<ul class="list">`+d.items.map(i=>{
-    if(pending===i.id) return `<li class="item pending"><div class="row"><div class="box"></div><div class="txt">${esc(i.text)}</div></div>
-      <div class="confirm">
-        <button class="cbtn cam ${pendingPhoto?'has':''}" data-photo="1">${ICO.cam}</button>
-        <button class="cbtn" data-yes="${i.id}">Подтвердить</button>
-        <button class="cbtn ghost" data-no="1">Отмена</button>
-      </div></li>`;
-    return `<li class="item ${i.at?'locked':''}" ${i.at?'':`data-tap="${i.id}"`}>
-      <div class="row"><div class="box">${ICO.check}</div><div class="txt">${esc(i.text)}</div>
-      ${i.at?`<span class="stamp">${hhmm(i.at)}</span>`:''}
-      ${i.photo?`<img class="thumb" src="${i.photo}" data-zoom="${i.photo}" alt="">`:''}</div></li>`;
-  }).join('')+`</ul>`+
-  (done===all?`<div class="empty" style="color:var(--sage);padding:32px 20px 8px">Всё отмечено. Можно идти.</div>`:'')+
-  `<div style="text-align:center"><button class="link" data-reset="1">Сменить сценарий на сегодня</button></div>`;
+  body+
+  (done===all?`<div class="empty" style="color:var(--ac);padding:32px 20px 8px">Всё отмечено. Можно идти.</div>`:'')+
+  `<div style="text-align:center;margin-top:10px">
+    <button class="link" data-addscen="1">Добавить сценарий</button><br>
+    <button class="link" data-reset="1" style="font-size:14px;color:var(--muted)">Собрать день заново</button>
+  </div>`;
 }
+function splural(n){const a=n%10,b=n%100;return a===1&&b!==11?'сценарий':a>=2&&a<=4&&(b<10||b>=20)?'сценария':'сценариев'}
 function plural(n){const a=n%10,b=n%100;return a===1&&b!==11?'пункт':a>=2&&a<=4&&(b<10||b>=20)?'пункта':'пунктов'}
 
 /* --- Сценарии --- */
@@ -340,11 +410,16 @@ function vHist(){
   if(d){
     const done=d.items.filter(i=>i.at).length;
     panel=`<div class="card" style="margin-top:16px">
-      <div class="dtitle"><span class="d">${shortDate(openDay)}</span><span class="s">${esc(d.scenario)}</span>
+      <div class="dtitle"><span class="d">${shortDate(openDay)}</span><span class="s">${esc(names(d))}</span>
       <span class="n ${done===d.items.length?'full':''}">${done}/${d.items.length}</span></div>
-      <div class="dbody"><div class="detail">`+d.items.map(i=>
-        `<div class="${i.at?'':'no'}">${esc(i.text)}<span class="tm" ${i.at?'':'style="color:#7C8794"'}>${i.at?hhmm(i.at):'—'}</span></div>`
-      ).join('')+`</div></div></div>`;
+      <div class="dbody">`+(d.scenarios||[d.scenario]).map(g=>{
+        const its=d.items.filter(i=>(i.g||d.scenario)===g);
+        if(!its.length)return '';
+        return ((d.scenarios||[]).length>1?`<div class="gsub">${esc(g)}</div>`:'')+
+          `<div class="detail">`+its.map(i=>
+            `<div class="${i.at?'':'no'}">${esc(i.text)}<span class="tm" ${i.at?'':'style="color:#7C8794"'}>${i.at?hhmm(i.at):'—'}</span></div>`
+          ).join('')+`</div>`;
+      }).join('')+`</div></div>`;
   } else {
     panel=`<p class="sub" style="text-align:center;margin:22px 0 0">${Object.keys(S.days).length?'Выберите день с отметкой.':'Отмеченные дни появятся в календаре.'}</p>`;
   }
@@ -377,7 +452,7 @@ function vSet(){
 
 /* ============ события ============ */
 document.addEventListener('click',e=>{
-  const t=e.target.closest('[data-tab],[data-tap],[data-yes],[data-no],[data-photo],[data-pick],[data-same],[data-reset],[data-edit],[data-new],[data-back],[data-del],[data-add],[data-drop],[data-day],[data-mon],[data-ac],[data-bg],[data-bgphoto],[data-nobg],[data-wipe],[data-zoom]');
+  const t=e.target.closest('[data-tab],[data-tap],[data-yes],[data-no],[data-photo],[data-pick],[data-same],[data-reset],[data-addscen],[data-cancel],[data-start],[data-edit],[data-new],[data-back],[data-del],[data-add],[data-drop],[data-day],[data-mon],[data-ac],[data-bg],[data-bgphoto],[data-nobg],[data-wipe],[data-zoom]');
   if(!t)return;
   const D=t.dataset;
 
@@ -397,16 +472,26 @@ document.addEventListener('click',e=>{
     it.at=Date.now(); if(pendingPhoto)it.photo=pendingPhoto;
     pending=null;pendingPhoto=null;save();render();return;
   }
-  if(D.pick){assign(S.scenarios.find(s=>s.id===D.pick));return}
+  if(D.pick){picked.has(D.pick)?picked.delete(D.pick):picked.add(D.pick);render();return}
+  if(D.addscen){picking=true;picked=new Set();render();return}
+  if(D.cancel){picking=false;picked=new Set();render();return}
+  if(D.start){
+    const chosen=[...picked].map(id=>S.scenarios.find(s=>s.id===id)).filter(Boolean);
+    if(!chosen.length)return;
+    if(D.start==='new')S.days[key()]={scenarios:[],items:[]};
+    const day=S.days[key()];
+    chosen.forEach(sc=>pour(day,sc));
+    picked=new Set();picking=false;save();render();return;
+  }
   if(D.same){
     const y=S.days[yKey()];
-    S.days[key()]={scenario:y.scenario,items:y.items.map((i,n)=>({id:uid(),text:i.text,pos:n,at:null,photo:null}))};
+    S.days[key()]={scenarios:[...y.scenarios],items:y.items.map((i,n)=>({id:uid(),text:i.text,g:i.g,pos:n,at:null,photo:null}))};
     save();render();return;
   }
   if(D.reset){
     const d=today();
-    if(d.items.some(i=>i.at)&&!confirm('Отметки за сегодня будут стёрты. Сменить сценарий?'))return;
-    delete S.days[key()];save();render();return;
+    if(d.items.some(i=>i.at)&&!confirm('Все отметки за сегодня будут стёрты. Собрать день заново?'))return;
+    delete S.days[key()];picking=false;picked=new Set();save();render();return;
   }
 
   /* сценарии */
@@ -474,6 +559,7 @@ let curDay=key();
 setInterval(()=>{if(key()!==curDay){curDay=key();openDay=null;if(tab==='today')render()}},30000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&key()!==curDay){curDay=key();render()}});
 
+migrate();
 render();
 
 /* офлайн-режим: только для http(s), локальный файл работает как раньше */
