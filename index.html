@@ -193,14 +193,22 @@ nav button.on{color:var(--paper)}
 const KEY='tochno.v1';
 let mem=null, useLS=true;
 try{localStorage.setItem('_t','1');localStorage.removeItem('_t')}catch(e){useLS=false}
+/* в APK данные пишутся в файл телефона через мост, в браузере — в localStorage */
+const NATIVE=window.TochnoNative||null;
 function load(){
-  try{const r=useLS?localStorage.getItem(KEY):mem; if(r) return JSON.parse(r)}catch(e){}
+  try{
+    const r=NATIVE?NATIVE.load():(useLS?localStorage.getItem(KEY):mem);
+    if(r) return JSON.parse(r);
+  }catch(e){}
   return null;
 }
 function save(){
   const s=JSON.stringify(S);
-  try{ if(useLS) localStorage.setItem(KEY,s); else mem=s; }
-  catch(e){ alert('Не хватило места в памяти. Скорее всего из-за фотографий — удалите фон-картинку или старые дни.'); }
+  try{
+    if(NATIVE){ if(!NATIVE.save(s)) throw new Error('write'); }
+    else if(useLS) localStorage.setItem(KEY,s); else mem=s;
+  }
+  catch(e){ alert(NATIVE?'Не удалось сохранить. Проверьте, есть ли свободное место на телефоне.':'Не хватило места в памяти. Скорее всего из-за фотографий — удалите фон-картинку или старые дни.'); }
 }
 
 /* ============ состояние ============ */
@@ -430,8 +438,11 @@ function vHist(){
   const shift=(first.getDay()+6)%7;              // неделя с понедельника
   const total=new Date(calY,calM+1,0).getDate();
   const tk=key(), now=new Date();
-  const future=(calY>now.getFullYear())||(calY===now.getFullYear()&&calM>now.getMonth());
+  const curOrLater=(calY>now.getFullYear())||(calY===now.getFullYear()&&calM>=now.getMonth());
+  const past=!curOrLater;
   const month=first.toLocaleDateString('ru-RU',{month:'long',year:'numeric'});
+  const pfx=calY+'-'+String(calM+1).padStart(2,'0')+'-';
+  const inMonth=Object.keys(S.days).filter(k=>k.startsWith(pfx)&&ready(S.days[k])).length;
 
   let cells='';
   for(let i=0;i<shift;i++)cells+='<div></div>';
@@ -467,11 +478,14 @@ function vHist(){
     <div class="calhead">
       <button class="arw" data-mon="-1">${ICO.prev}</button>
       <span class="m">${month.charAt(0).toUpperCase()+month.slice(1)}</span>
-      <button class="arw" data-mon="1" ${future?'disabled':''}>${ICO.next}</button>
+      <button class="arw" data-mon="1" ${curOrLater?'disabled':''}>${ICO.next}</button>
     </div>
     <div class="wk"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div>
     <div class="days">${cells}</div>
-  </div>`+panel;
+  </div>`+panel+
+  (past&&inMonth?`<div style="text-align:center;margin-top:18px">
+    <button class="link danger" data-delmon="${pfx}" data-cnt="${inMonth}" data-mname="${esc(first.toLocaleDateString('ru-RU',{month:'long'}))}">Удалить записи за ${esc(first.toLocaleDateString('ru-RU',{month:'long'}))}</button>
+  </div>`:'');
 }
 
 /* --- Настройки --- */
@@ -492,7 +506,7 @@ function vSet(){
 
 /* ============ события ============ */
 document.addEventListener('click',e=>{
-  const t=e.target.closest('[data-tab],[data-tap],[data-yes],[data-no],[data-photo],[data-pick],[data-same],[data-reset],[data-addscen],[data-cancel],[data-start],[data-edit],[data-new],[data-back],[data-del],[data-add],[data-wd],[data-drop],[data-day],[data-mon],[data-ac],[data-bg],[data-bgphoto],[data-nobg],[data-wipe],[data-zoom]');
+  const t=e.target.closest('[data-tab],[data-tap],[data-yes],[data-no],[data-photo],[data-pick],[data-same],[data-reset],[data-addscen],[data-cancel],[data-start],[data-edit],[data-new],[data-back],[data-del],[data-add],[data-wd],[data-drop],[data-day],[data-delmon],[data-mon],[data-ac],[data-bg],[data-bgphoto],[data-nobg],[data-wipe],[data-zoom]');
   if(!t)return;
   const D=t.dataset;
 
@@ -557,6 +571,12 @@ document.addEventListener('click',e=>{
 
   /* история */
   if(D.day){openDay=openDay===D.day?null:D.day;render();return}
+  if(D.delmon){
+    const n=+D.cnt;
+    if(!confirm(`Удалить все записи за ${D.mname}? Дней с отметками: ${n}. Фото этих дней тоже удалятся. Отменить будет нельзя.`))return;
+    Object.keys(S.days).filter(k=>k.startsWith(D.delmon)).forEach(k=>delete S.days[k]);
+    openDay=null;save();render();return;
+  }
   if(D.mon){
     const m=calM+ +D.mon;
     calY+=Math.floor(m/12); calM=(m%12+12)%12;
