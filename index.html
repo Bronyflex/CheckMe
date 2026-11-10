@@ -95,8 +95,40 @@ input[type=text]:focus{outline:none;border-color:var(--sand)}
 .srow:last-child{border-bottom:0}
 .srow .nm{font-size:16px}
 .srow .ct{font-size:13px;color:var(--muted);margin-left:auto}
-.editrow{display:flex;align-items:center;gap:12px;padding:14px 2px;border-bottom:1px solid var(--line)}
-.editrow .t{font-size:16px;flex:1;line-height:1.35}
+.editrow{display:flex;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid var(--line);background:transparent;position:relative}
+.editrow .t{font-size:16px;flex:1;line-height:1.35;padding:4px 0;word-break:break-word}
+.editrow input{flex:1;min-width:0;padding:9px 11px;font-size:16px}
+.editrow.dragging{z-index:5;background:rgba(20,28,38,.96);box-shadow:0 8px 24px rgba(0,0,0,.45);border-radius:10px;border-bottom-color:transparent}
+.grip{flex:none;color:var(--muted);padding:8px 6px;touch-action:none;display:grid;place-items:center;cursor:grab}
+.grip svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round}
+.hint{font-size:12.5px;color:var(--muted);margin:10px 0 0;line-height:1.5}
+
+/* очистка истории */
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 18px}
+.chip{border:1px solid var(--line);background:rgba(238,242,246,.06);color:var(--paper);font:inherit;font-size:14px;border-radius:20px;padding:8px 14px}
+.chip.on{background:var(--ac);border-color:var(--ac);color:var(--ink)}
+.range{display:flex;gap:10px;align-items:center;margin-bottom:16px}
+.range label{flex:1;font-size:12.5px;color:var(--muted)}
+.range input{display:block;width:100%;margin-top:5px;font:inherit;font-size:15px;color:var(--paper);background:rgba(238,242,246,.07);border:1px solid var(--line);border-radius:11px;padding:11px 12px;color-scheme:dark}
+.toggle{display:flex;align-items:center;gap:12px;padding:14px 0;font-size:15px}
+.toggle .sw2{margin-left:auto;flex:none;width:44px;height:26px;border-radius:13px;background:rgba(238,242,246,.15);position:relative;transition:.18s}
+.toggle .sw2:after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--paper);transition:.18s}
+.toggle.on .sw2{background:var(--ac)}
+.toggle.on .sw2:after{left:21px;background:var(--ink)}
+.summary{font-size:14.5px;line-height:1.55;padding:14px 16px;margin-bottom:6px}
+.btn-danger{display:block;width:100%;border:0;font:inherit;font-size:16px;font-weight:500;background:#D98B7E;color:var(--ink);border-radius:13px;padding:15px;margin-top:12px}
+.btn-danger:disabled{background:rgba(238,242,246,.1);color:#5D6874}
+
+/* праздник */
+#party{position:fixed;inset:0;z-index:70;display:none}
+#party canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#party .pc{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(8,12,17,.8);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);animation:fadein .2s ease-out}
+#party img{max-width:70vw;max-height:42vh;border-radius:16px;animation:boing .6s cubic-bezier(.2,1.6,.4,1)}
+#party .yip{font-size:54px;font-weight:800;color:var(--ac);letter-spacing:.01em;text-shadow:0 4px 18px rgba(0,0,0,.5);animation:boing .6s cubic-bezier(.2,1.6,.4,1),wig 1.1s ease-in-out .6s infinite}
+#party .sm{font-size:13px;color:var(--muted)}
+@keyframes boing{from{transform:scale(.3);opacity:0}}
+@keyframes fadein{from{opacity:0}}
+@keyframes wig{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
 .x{border:0;background:none;color:var(--muted);padding:6px;display:grid;place-items:center}
 .x svg{width:16px;height:16px}
 .addbar{display:flex;gap:8px;margin-top:16px}
@@ -187,6 +219,8 @@ nav button.on{color:var(--paper)}
 <div id="viewer"><img alt=""><div class="cap">Нажмите, чтобы закрыть</div></div>
 <input type="file" id="cam" accept="image/*" capture="environment" hidden>
 <input type="file" id="bgfile" accept="image/*" hidden>
+<input type="file" id="cheerfile" accept="image/*" hidden>
+<div id="party"></div>
 
 <script>
 /* ============ хранилище ============ */
@@ -248,6 +282,7 @@ let S=load()||DEF;
 let tab='today', pending=null, pendingPhoto=null, editing=null, openDay=null;
 let calY=new Date().getFullYear(), calM=new Date().getMonth();
 let picked=new Set(), picking=false, pendingNote='';
+let lateRender=null, editItem=null, cleaning=false, cFrom='', cTo='', cPreset='old', cPhotosOnly=false;
 
 /* ============ утилиты ============ */
 const el=s=>document.querySelector(s);
@@ -267,6 +302,7 @@ const ICO={
   check:'<svg viewBox="0 0 24 24" fill="none" stroke="#141C26" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5.5 5.5L20 6"/></svg>',
   cam:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5A2 2 0 015 6.5h2l1.4-2h7.2L17 6.5h2a2 2 0 012 2V18a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><circle cx="12" cy="13" r="3.4"/></svg>',
   x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  grip:'<svg viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14"/></svg>',
   prev:'<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>',
   next:'<svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>',
   today:'<svg viewBox="0 0 24 24"><path d="M4 11.5l5 5 11-11"/></svg>',
@@ -325,6 +361,7 @@ function autoBuild(){
 
 /* ============ рендер ============ */
 function render(){
+  clearTimeout(lateRender);
   autoBuild();
   const v=el('#view');
   if(tab==='today')v.innerHTML=vToday();
@@ -427,7 +464,14 @@ function vEditor(){
   <p class="sub" style="margin:0 0 8px">Назначать автоматически в эти дни:</p>
   <div class="wdays">${[[1,'Пн'],[2,'Вт'],[3,'Ср'],[4,'Чт'],[5,'Пт'],[6,'Сб'],[0,'Вс']]
     .map(([n,l])=>`<div class="wd ${(s.days||[]).includes(n)?'on':''}" data-wd="${n}">${l}</div>`).join('')}</div>
-  ${s.items.map(i=>`<div class="editrow"><span class="t">${esc(i.text)}</span><button class="x" data-del="${i.id}">${ICO.x}</button></div>`).join('')||'<p class="sub">Пунктов пока нет.</p>'}
+  ${s.items.length?`<div id="elist">`+s.items.map(i=>`<div class="editrow" data-iid="${i.id}">
+      <span class="grip" data-grip="1">${ICO.grip}</span>
+      ${editItem===i.id
+        ?`<input type="text" id="ei" value="${esc(i.text)}">`
+        :`<span class="t" data-ed="${i.id}">${esc(i.text)}</span>`}
+      <button class="x" data-del="${i.id}">${ICO.x}</button></div>`).join('')+`</div>
+    <p class="hint">Нажмите на пункт, чтобы изменить текст. Тяните за ≡, чтобы поменять порядок.</p>`
+   :'<p class="sub">Пунктов пока нет.</p>'}
   <div class="addbar"><input type="text" id="ni" placeholder="Новый пункт"><button data-add="1">Добавить</button></div>
   <div style="text-align:center;margin-top:34px"><button class="link danger" data-drop="1">Удалить сценарий</button></div>`;
 }
@@ -489,7 +533,55 @@ function vHist(){
 }
 
 /* --- Настройки --- */
+/* --- Очистка истории --- */
+function shiftKey(days){const d=new Date();d.setDate(d.getDate()+days);return key(d)}
+function histKeys(){return Object.keys(S.days).filter(k=>k!==key()).sort()}   // сегодняшний день не трогаем
+function presetRange(p){
+  const ks=histKeys(), first=ks[0]||yKey(), y=yKey();
+  if(p==='old')return [first, shiftKey(-31)];
+  if(p==='all')return [first, y];
+  if(p==='prev'){
+    const n=new Date(), a=new Date(n.getFullYear(),n.getMonth()-1,1), b=new Date(n.getFullYear(),n.getMonth(),0);
+    return [key(a), key(b)];
+  }
+  return [cFrom||first, cTo||y];
+}
+function presetFix(r){return r[0]>r[1]?[r[1],r[1]]:r}
+function cleanTargets(){
+  if(!cFrom||!cTo||cFrom>cTo)return {days:[],keys:[],photos:0,marks:0};
+  const keys=histKeys().filter(k=>k>=cFrom&&k<=cTo);
+  const days=keys.filter(k=>ready(S.days[k]));
+  let photos=0, marks=0;
+  days.forEach(k=>S.days[k].items.forEach(i=>{if(i.photo)photos++;if(i.at)marks++}));
+  return {days,keys,photos,marks};
+}
+function vClean(){
+  const n=new Date(), pm=new Date(n.getFullYear(),n.getMonth()-1,1).toLocaleDateString('ru-RU',{month:'long'});
+  const t=cleanTargets();
+  const nothing=cPhotosOnly?!t.photos:!t.days.length;
+  const what=cPhotosOnly
+    ?`Будет удалено фото: <b>${t.photos}</b>. Отметки и время останутся.`
+    :`Будет удалено дней: <b>${t.days.length}</b>, отметок: ${t.marks}, фото: ${t.photos}.`;
+  return `<button class="link" data-cleanback="1">← Настройки</button>
+  <h2 class="h" style="margin-top:6px">Очистить историю</h2>
+  <p class="sub">Сценарии, настройки и сегодняшний день не затрагиваются.</p>
+  <div class="chips">
+    <button class="chip ${cPreset==='old'?'on':''}" data-preset="old">Старше месяца</button>
+    <button class="chip ${cPreset==='prev'?'on':''}" data-preset="prev">За ${esc(pm)}</button>
+    <button class="chip ${cPreset==='all'?'on':''}" data-preset="all">Всё, кроме сегодня</button>
+    <button class="chip ${cPreset==='custom'?'on':''}" data-preset="custom">Свой период</button>
+  </div>
+  <div class="range">
+    <label>С<input type="date" id="cfrom" value="${cFrom}" max="${yKey()}"></label>
+    <label>По<input type="date" id="cto" value="${cTo}" max="${yKey()}"></label>
+  </div>
+  <div class="toggle ${cPhotosOnly?'on':''}" data-photosonly="1">Удалить только фото<span class="sw2"></span></div>
+  <div class="card summary">${cFrom>cTo?'Дата «с» позже даты «по».':(nothing?'За этот период удалять нечего.':what)}</div>
+  <button class="btn-danger" data-doclean="1" ${nothing||cFrom>cTo?'disabled':''}>Удалить</button>`;
+}
+
 function vSet(){
+  if(cleaning)return vClean();
   return `<h2 class="h">Настройки</h2><p class="sub">Фон главного экрана.</p>
   <div class="grid">${BGS.map(b=>`<div class="sw ${(!S.bgphoto&&S.bg===b.id)?'on':''}" data-bg="${b.id}" style="background-image:${b.css}"></div>`).join('')}</div>
   <button class="big" style="margin-top:12px" data-bgphoto="1">Своя картинка<span>${S.bgphoto?'Загружена — нажмите, чтобы заменить':'Из галереи телефона'}</span></button>
@@ -500,13 +592,25 @@ function vSet(){
   <input class="slider" type="range" min="15" max="90" value="${S.scrim}" id="sc">
   <p class="sub" style="margin:30px 0 12px">Цвет галочек и отметок времени.</p>
   <div class="grid">${ACCENTS.map(a=>`<div class="sw ${S.accent===a.id?'on':''}" data-ac="${a.id}" style="background:${a.c};aspect-ratio:1/.62"></div>`).join('')}</div>
+
+  <div class="toggle ${S.party!==false?'on':''}" data-party="1" style="margin-top:22px">Праздник, когда всё отмечено<span class="sw2"></span></div>
+  ${S.party!==false?`
+  <button class="big" data-cheer="1">Картинка для праздника<span>${S.cheer?'Загружена — нажмите, чтобы заменить':'Своя картинка или гифка из галереи'}</span></button>
+  <div style="text-align:center">
+    <button class="link" data-testparty="1">Посмотреть</button>
+    ${S.cheer?`&nbsp;·&nbsp;<button class="link" data-nocheer="1">Убрать картинку</button>`:''}
+  </div>`:''}
+
+  <p class="sub" style="margin:30px 0 10px">Память.</p>
+  <button class="big" data-clean="1">Очистить историю<span>Удалить отметки и фото за выбранный период. Сценарии и настройки останутся.</span></button>
+
   <p class="note" style="margin-top:34px">Все записи хранятся только на этом устройстве. Приложение ничего не отправляет в сеть и работает без интернета.</p>
   <div style="text-align:center;margin-top:18px"><button class="link danger" data-wipe="1">Стереть все данные</button></div>`;
 }
 
 /* ============ события ============ */
 document.addEventListener('click',e=>{
-  const t=e.target.closest('[data-tab],[data-tap],[data-yes],[data-no],[data-photo],[data-pick],[data-same],[data-reset],[data-addscen],[data-cancel],[data-start],[data-edit],[data-new],[data-back],[data-del],[data-add],[data-wd],[data-drop],[data-day],[data-delmon],[data-mon],[data-ac],[data-bg],[data-bgphoto],[data-nobg],[data-wipe],[data-zoom]');
+  const t=e.target.closest('[data-tab],[data-tap],[data-yes],[data-no],[data-photo],[data-pick],[data-same],[data-reset],[data-addscen],[data-cancel],[data-start],[data-edit],[data-new],[data-back],[data-del],[data-add],[data-wd],[data-drop],[data-day],[data-delmon],[data-mon],[data-ac],[data-bg],[data-bgphoto],[data-nobg],[data-wipe],[data-zoom],[data-ed],[data-party],[data-cheer],[data-testparty],[data-nocheer],[data-clean],[data-cleanback],[data-preset],[data-photosonly],[data-doclean]');
   if(!t)return;
   const D=t.dataset;
 
@@ -514,7 +618,32 @@ document.addEventListener('click',e=>{
   if(D.tab){
     if(editing&&D.tab!=='scen')editing=null;
     if(D.tab==='hist'){const n=new Date();calY=n.getFullYear();calM=n.getMonth();openDay=S.days[key()]?key():null}
-    tab=D.tab;pending=null;pendingPhoto=null;render();return;
+    tab=D.tab;pending=null;pendingPhoto=null;editItem=null;cleaning=false;render();return;
+  }
+
+  /* правка текста пункта */
+  if(D.ed){saveName();editItem=D.ed;render();const f=el('#ei');if(f){f.focus();f.setSelectionRange(f.value.length,f.value.length)}return}
+
+  /* праздник */
+  if(D.party){S.party=S.party===false;save();render();return}
+  if(D.cheer){el('#cheerfile').click();return}
+  if(D.nocheer){S.cheer=null;save();render();return}
+  if(D.testparty){celebrate();return}
+
+  /* очистка истории */
+  if(D.clean){cleaning=true;cPreset='old';[cFrom,cTo]=presetFix(presetRange('old'));cPhotosOnly=false;render();window.scrollTo(0,0);return}
+  if(D.cleanback){cleaning=false;render();return}
+  if(D.preset){cPreset=D.preset;[cFrom,cTo]=presetFix(presetRange(D.preset));render();return}
+  if(D.photosonly){cPhotosOnly=!cPhotosOnly;render();return}
+  if(D.doclean){
+    const t=cleanTargets();
+    const msg=cPhotosOnly
+      ?`Удалить ${t.photos} фото за период ${shortDate(cFrom)} — ${shortDate(cTo)}? Отметки останутся.`
+      :`Удалить ${t.days.length} дн. истории за период ${shortDate(cFrom)} — ${shortDate(cTo)}? Отменить будет нельзя.`;
+    if(!confirm(msg))return;
+    if(cPhotosOnly) t.days.forEach(k=>S.days[k].items.forEach(i=>{delete i.photo}));
+    else t.keys.forEach(k=>delete S.days[k]);
+    openDay=null;save();render();return;
   }
 
   /* сегодня */
@@ -527,7 +656,9 @@ document.addEventListener('click',e=>{
     it.at=Date.now();
     if(pendingPhoto)it.photo=pendingPhoto;
     if(pendingNote.trim())it.note=pendingNote.trim();
-    pending=null;pendingPhoto=null;pendingNote='';save();render();return;
+    pending=null;pendingPhoto=null;pendingNote='';save();render();
+    if(S.party!==false && today().items.every(i=>i.at)) celebrate();
+    return;
   }
   if(D.pick){picked.has(D.pick)?picked.delete(D.pick):picked.add(D.pick);render();return}
   if(D.addscen){picking=true;picked=new Set();render();return}
@@ -598,7 +729,109 @@ function addItem(){
   save();render();
   const n=el('#ni'); if(n)n.focus();
 }
-document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='ni'){e.preventDefault();addItem()}});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&e.target.id==='ni'){e.preventDefault();addItem()}
+  if(e.key==='Enter'&&e.target.id==='ei'){e.preventDefault();e.target.blur()}
+});
+
+/* правка пункта сохраняется, когда поле теряет фокус */
+function commitEdit(){
+  const f=el('#ei'); if(!f||!editItem)return;
+  const s=S.scenarios.find(x=>x.id===editing);
+  const it=s&&s.items.find(i=>i.id===editItem);
+  if(it&&f.value.trim())it.text=f.value.trim();
+  editItem=null;save();
+  clearTimeout(lateRender);lateRender=setTimeout(render,180);   // дать сработать тапу по другой кнопке
+}
+document.addEventListener('focusout',e=>{if(e.target.id==='ei')commitEdit()});
+
+/* даты в очистке */
+document.addEventListener('change',e=>{
+  if(e.target.id==='cfrom'||e.target.id==='cto'){
+    if(e.target.id==='cfrom')cFrom=e.target.value; else cTo=e.target.value;
+    cPreset='custom';render();
+  }
+});
+
+/* перетаскивание пунктов за ≡ */
+let drag=null;
+document.addEventListener('pointerdown',e=>{
+  const g=e.target.closest('[data-grip]'); if(!g)return;
+  e.preventDefault();
+  const row=g.closest('.editrow');
+  drag={row,list:row.parentElement,y0:e.clientY};
+  row.classList.add('dragging');
+  try{g.setPointerCapture(e.pointerId)}catch(_){}
+});
+document.addEventListener('pointermove',e=>{
+  if(!drag)return;
+  e.preventDefault();
+  const {row,list}=drag;
+  let dy=e.clientY-drag.y0;
+  row.style.transform=`translateY(${dy}px)`;
+  const rows=[...list.children], i=rows.indexOf(row);
+  const r=row.getBoundingClientRect(), mid=r.top+r.height/2;
+  const next=rows[i+1], prev=rows[i-1];
+  if(next){const b=next.getBoundingClientRect(); if(mid>b.top+b.height/2){list.insertBefore(next,row);drag.y0+=b.height}}
+  if(prev){const b=prev.getBoundingClientRect(); if(mid<b.top+b.height/2){list.insertBefore(row,prev);drag.y0-=b.height}}
+  row.style.transform=`translateY(${e.clientY-drag.y0}px)`;
+},{passive:false});
+function endDrag(){
+  if(!drag)return;
+  const {row,list}=drag; drag=null;
+  row.style.transform='';row.classList.remove('dragging');
+  const s=S.scenarios.find(x=>x.id===editing); if(!s)return;
+  const order=[...list.children].map(r=>r.dataset.iid);
+  s.items.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));
+  save();render();
+}
+document.addEventListener('pointerup',endDrag);
+document.addEventListener('pointercancel',endDrag);
+
+/* праздник: конфетти + картинка */
+function celebrate(){
+  const ov=el('#party');
+  ov.innerHTML=`<div class="pc">${S.cheer?`<img src="${S.cheer}" alt="">`:''}<div class="yip">Yippee!</div><div class="sm">Всё отмечено</div></div><canvas></canvas>`;
+  ov.style.display='block';
+  let alive=true;
+  const close=()=>{if(!alive)return;alive=false;ov.style.display='none';ov.innerHTML=''};
+  ov.onclick=close;
+  setTimeout(close,5500);
+  if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+
+  const c=ov.querySelector('canvas'), x=c.getContext('2d'), dpr=Math.min(2,window.devicePixelRatio||1);
+  const W=innerWidth, H=innerHeight; c.width=W*dpr; c.height=H*dpr; x.scale(dpr,dpr);
+  const cols=[getComputedStyle(document.documentElement).getPropertyValue('--ac').trim()||'#8FBBA4',
+    '#E3C08C','#8FB6D9','#B6A9DE','#DDA3A9','#7FCBC4','#EEF2F6'];
+  const P=[];
+  // два «хлопка» из нижних углов
+  [[0,1],[1,-1]].forEach(([sx,dir])=>{
+    for(let n=0;n<85;n++){
+      const a=0.08+Math.random()*0.42, sp=(19+Math.random()*12)*Math.sqrt(H/800);   // угол от вертикали
+      P.push({x:sx*W,y:H+10,vx:Math.sin(a)*sp*dir,vy:-Math.cos(a)*sp,
+        w:6+Math.random()*6,h:8+Math.random()*8,r:Math.random()*6,vr:(Math.random()-.5)*.35,
+        c:cols[(Math.random()*cols.length)|0],t:Math.random()*6});
+    }
+  });
+  let last=performance.now();
+  (function tick(now){
+    if(!alive)return;
+    const k=Math.min(2,(now-last)/16.7); last=now;
+    x.clearRect(0,0,W,H);
+    let any=false;
+    for(const p of P){
+      p.vy+=0.3*k; p.vx*=Math.pow(0.99,k); p.vy*=Math.pow(0.99,k);
+      if(p.vy>2.6)p.vy=2.6;                 // на спуске бумажка парит
+      p.x+=(p.vx+(p.vy>0?Math.sin(p.t)*0.9:0))*k; p.y+=p.vy*k; p.r+=p.vr*k; p.t+=0.12*k;
+      if(p.y<H+40)any=true;
+      x.save(); x.translate(p.x,p.y); x.rotate(p.r);
+      x.scale(1,Math.cos(p.t));            // «переворачивание» бумажки
+      x.fillStyle=p.c; x.fillRect(-p.w/2,-p.h/2,p.w,p.h);
+      x.restore();
+    }
+    if(any)requestAnimationFrame(tick);
+  })(last);
+}
 document.addEventListener('input',e=>{
   if(e.target.id==='sc'){S.scrim=+e.target.value;el('#scrim').style.opacity=S.scrim/100;save()}
   if(e.target.id==='fs'){S.fs=+e.target.value;el('#view').style.zoom=S.fs/100;save()}
@@ -607,13 +840,13 @@ document.addEventListener('input',e=>{
 el('#viewer').addEventListener('click',()=>el('#viewer').style.display='none');
 
 /* фото */
-function shrink(file,max,q){return new Promise(res=>{
+function shrink(file,max,q,mime){return new Promise(res=>{
   const r=new FileReader();
   r.onload=()=>{const im=new Image();im.onload=()=>{
     const k=Math.min(1,max/Math.max(im.width,im.height));
     const c=document.createElement('canvas');c.width=im.width*k;c.height=im.height*k;
     c.getContext('2d').drawImage(im,0,0,c.width,c.height);
-    res(c.toDataURL('image/jpeg',q));
+    res(c.toDataURL(mime||'image/jpeg',q));
   };im.src=r.result};
   r.readAsDataURL(file);
 })}
@@ -622,6 +855,20 @@ el('#cam').addEventListener('change',async e=>{
   pendingPhoto=await shrink(e.target.files[0],900,.6);
   e.target.value='';render();
 });
+/* картинка праздника: гифку храним как есть, чтобы не потерять анимацию */
+el('#cheerfile').addEventListener('change',async e=>{
+  const f=e.target.files[0]; e.target.value='';
+  if(!f)return;
+  const limit=NATIVE?8e6:1.5e6;
+  if(f.type==='image/gif'||f.type==='image/webp'){
+    if(f.size>limit){alert('Гифка слишком большая. Подойдёт до '+Math.round(limit/1e6*10)/10+' МБ.');return}
+    S.cheer=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(f)});
+  } else {
+    S.cheer=await shrink(f,800,.8,f.type==='image/png'?'image/png':'image/jpeg');
+  }
+  save();render();celebrate();
+});
+
 el('#bgfile').addEventListener('change',async e=>{
   if(!e.target.files[0])return;
   S.bgphoto=await shrink(e.target.files[0],1400,.72);
